@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diário Interativo de Glicemia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+            color: #343a40;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            max-height: 50vh;
+        }
+        .kpi {
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .kpi-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+            color: #0077b6;
+        }
+        .kpi-label {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-normal { background-color: #28a745; }
+        .status-elevado { background-color: #ffc107; }
+        .status-alto { background-color: #dc3545; }
+        .status-baixo { background-color: #0077b6; }
+        .filter-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .filter-btn.active {
+            background-color: #0077b6;
+            color: white;
+            font-weight: 600;
+        }
+        /* Style for delete button */
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            margin-left: 8px; /* Added margin for spacing */
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-5 text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-[#023e8a]">Diário Interativo de Glicemia</h1>
+            <p class="mt-1 text-lg text-[#0077b6]">Registre e acompanhe seus níveis de glicose com facilidade.</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 md:p-6">
+        
+        <section id="entry" class="mb-8">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold mb-4 text-[#023e8a]">Novo Registro</h2>
+                <form id="log-form" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                    <div>
+                        <label for="date" class="block text-sm font-medium text-gray-700">Data</label>
+                        <input type="date" id="date" name="date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                    </div>
+                    <div>
+                        <label for="timeOfDay" class="block text-sm font-medium text-gray-700">Período</label>
+                        <select id="timeOfDay" name="timeOfDay" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                            <option value="Jejum">Jejum</option>
+                            <option value="Pós-café (1h)">Pós-café (1h)</option>
+                            <option value="Pós-almoço (2h)">Pós-almoço (2h)</option>
+                            <option value="Pós-jantar (2h)">Pós-jantar (2h)</option>
+                            <option value="Antes de dormir">Antes de dormir</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="glucose" class="block text-sm font-medium text-gray-700">Glicemia (mg/dL)</label>
+                        <input type="number" id="glucose" name="glucose" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="notes" class="block text-sm font-medium text-gray-700">Observações</label>
+                        <div class="flex items-center">
+                            <input type="text" id="notes" name="notes" placeholder="Ex: Senti tontura, comi X..." class="mt-1 block w-full rounded-l-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                            <button type="submit" class="bg-[#0077b6] text-white font-semibold py-2 px-4 rounded-r-md hover:bg-[#005a8d] transition-colors h-full">Salvar</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+        
+        <section id="dashboard" class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <h2 class="text-2xl font-bold mb-4 text-[#023e8a]">Painel de Controle Semanal</h2>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="kpi-container">
+                </div>
+
+            <div class="flex flex-wrap justify-center gap-2 mb-4" id="chart-filters">
+                <button data-filter="Todos" class="filter-btn active py-2 px-4 bg-gray-200 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-300">Todos</button>
+                <button data-filter="Jejum" class="filter-btn py-2 px-4 bg-gray-200 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-300">Jejum</button>
+                <button data-filter="Pós-refeição" class="filter-btn py-2 px-4 bg-gray-200 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-300">Pós-refeição</button>
+                <button data-filter="Antes de dormir" class="filter-btn py-2 px-4 bg-gray-200 rounded-full text-sm font-medium text-gray-700 hover:bg-gray-300">Antes de dormir</button>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="glucoseChart"></canvas>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <section id="today-log" class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold mb-4 text-[#023e8a]">Registros de Hoje</h2>
+                <div id="today-log-list" class="space-y-3">
+                    <p class="text-gray-500">Nenhum registro para hoje ainda.</p>
+                </div>
+            </section>
+
+            <section id="history" class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold mb-4 text-[#023e8a]">Histórico Completo</h2>
+                <div class="max-h-96 overflow-y-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Período</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th> </tr>
+                        </thead>
+                        <tbody id="history-table-body" class="bg-white divide-y divide-gray-200">
+                           </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </main>
+    
+    <footer class="text-center py-6 mt-8">
+        <p class="text-sm text-gray-600">Esta ferramenta é para acompanhamento pessoal. Consulte sempre seu médico.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('log-form');
+            const dateInput = document.getElementById('date');
+            const todayLogList = document.getElementById('today-log-list');
+            const historyTableBody = document.getElementById('history-table-body');
+            const kpiContainer = document.getElementById('kpi-container');
+            const filterContainer = document.getElementById('chart-filters');
+            
+            let chartInstance = null;
+            let logEntries = [];
+
+            const GOALS = {
+                JEJUM_MAX: 95,
+                POS_REFEICAO_1H_MAX: 140,
+                POS_REFEICAO_2H_MAX: 120,
+                LOW_THRESHOLD: 70
+            };
+
+            const getStatus = (entry) => {
+                const value = entry.value;
+                if (value < GOALS.LOW_THRESHOLD) return { text: 'Baixo', class: 'status-baixo' };
+                if (entry.timeOfDay === 'Jejum' && value >= GOALS.JEJUM_MAX) return { text: 'Elevado', class: 'status-elevado' };
+                if (entry.timeOfDay.includes('Pós-café') && value >= GOALS.POS_REFEICAO_1H_MAX) return { text: 'Elevado', class: 'status-elevado' };
+                if ((entry.timeOfDay.includes('Pós-almoço') || entry.timeOfDay.includes('Pós-jantar')) && value >= GOALS.POS_REFEICAO_2H_MAX) return { text: 'Elevado', class: 'status-elevado' };
+                if (value > 180) return { text: 'Alto', class: 'status-alto' };
+                return { text: 'Normal', class: 'status-normal' };
+            };
+
+            const loadData = () => {
+                const storedData = localStorage.getItem('glicemiaLog');
+                if (storedData) {
+                    try {
+                        logEntries = JSON.parse(storedData).map(entry => ({...entry, date: new Date(entry.date)}));
+                    } catch (e) {
+                        console.error("Error parsing localStorage data:", e);
+                        logEntries = []; // Reset if data is corrupt
+                    }
+                } else {
+                    // Add mock data if storage is empty for demonstration
+                    const today = new Date();
+                    logEntries = [
+                        { id: 1, date: new Date(new Date().setDate(new Date().getDate() - 4)), timeOfDay: 'Jejum', value: 98, notes: 'Exemplo' },
+                        { id: 2, date: new Date(new Date().setDate(new Date().getDate() - 3)), timeOfDay: 'Pós-almoço (2h)', value: 135, notes: 'Exemplo' },
+                        { id: 3, date: new Date(new Date().setDate(new Date().getDate() - 2)), timeOfDay: 'Jejum', value: 88, notes: 'Exemplo' },
+                        { id: 4, date: new Date(new Date().setDate(new Date().getDate() - 1)), timeOfDay: 'Pós-jantar (2h)', value: 110, notes: 'Exemplo' },
+                        { id: 5, date: new Date(), timeOfDay: 'Jejum', value: 92, notes: 'Exemplo' },
+                    ];
+                }
+                logEntries.sort((a, b) => b.date - a.date); // Sort by date descending
+            };
+
+            const saveData = () => {
+                localStorage.setItem('glicemiaLog', JSON.stringify(logEntries));
+            };
+
+            // NEW: Function to delete an entry
+            const deleteEntry = (idToDelete) => {
+                logEntries = logEntries.filter(entry => entry.id !== idToDelete);
+                saveData();
+                renderAll(); // Re-render all sections after deletion
+            };
+
+            const renderTodayLog = () => {
+                todayLogList.innerHTML = '';
+                const today = new Date().toDateString();
+                const todayEntries = logEntries.filter(entry => new Date(entry.date).toDateString() === today);
+
+                if (todayEntries.length === 0) {
+                    todayLogList.innerHTML = '<p class="text-gray-500">Nenhum registro para hoje ainda.</p>';
+                    return;
+                }
+                
+                todayEntries.sort((a,b) => a.date - b.date).forEach(entry => {
+                    const status = getStatus(entry);
+                    const div = document.createElement('div');
+                    div.className = 'p-3 rounded-md border border-gray-200 flex justify-between items-center';
+                    div.innerHTML = `
+                        <div>
+                            <p class="font-semibold text-gray-800">${entry.timeOfDay}: <span class="text-[#0077b6]">${entry.value} mg/dL</span></p>
+                            <p class="text-xs text-gray-500">${entry.notes || ''}</p>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="status-dot ${status.class}"></span>
+                            <span class="text-sm font-medium text-gray-600">${status.text}</span>
+                            <button class="delete-btn" data-id="${entry.id}">Excluir</button> </div>
+                    `;
+                    todayLogList.appendChild(div);
+                });
+                // Attach event listeners for delete buttons
+                todayLogList.querySelectorAll('.delete-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        if (confirm('Tem certeza que deseja excluir este registro?')) {
+                            deleteEntry(parseInt(e.target.dataset.id));
+                        }
+                    });
+                });
+            };
+
+            const renderHistoryTable = () => {
+                historyTableBody.innerHTML = '';
+                 if (logEntries.length === 0) {
+                    historyTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">Nenhum registro.</td></tr>'; // Colspan adjusted for new column
+                    return;
+                }
+                logEntries.forEach(entry => {
+                    const status = getStatus(entry);
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${new Date(entry.date).toLocaleDateString('pt-BR')}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${entry.timeOfDay}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-800 flex items-center">
+                            <span class="status-dot ${status.class}"></span>
+                            ${entry.value}
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
+                            <button class="delete-btn" data-id="${entry.id}">Excluir</button> </td>
+                    `;
+                    historyTableBody.appendChild(row);
+                });
+                // Attach event listeners for delete buttons
+                historyTableBody.querySelectorAll('.delete-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        if (confirm('Tem certeza que deseja excluir este registro?')) {
+                            deleteEntry(parseInt(e.target.dataset.id));
+                        }
+                    });
+                });
+            };
+
+            const renderKPIs = () => {
+                const last7Days = new Date();
+                last7Days.setDate(last7Days.getDate() - 7);
+                const recentEntries = logEntries.filter(entry => new Date(entry.date) >= last7Days);
+                
+                const avg = recentEntries.length > 0 ? (recentEntries.reduce((sum, e) => sum + e.value, 0) / recentEntries.length).toFixed(0) : 'N/A';
+                const highCount = recentEntries.filter(e => ['Elevado', 'Alto'].includes(getStatus(e).text)).length;
+                const lowCount = recentEntries.filter(e => getStatus(e).text === 'Baixo').length;
+                const lastReading = logEntries.length > 0 ? logEntries[0].value : 'N/A'; // Assuming logEntries is sorted by date desc
+                
+                kpiContainer.innerHTML = `
+                    <div class="kpi"><div class="kpi-value">${lastReading}</div><div class="kpi-label">Última Leitura</div></div>
+                    <div class="kpi"><div class="kpi-value">${avg}</div><div class="kpi-label">Média (7 dias)</div></div>
+                    <div class="kpi"><div class="kpi-value text-red-500">${highCount}</div><div class="kpi-label">Leituras Altas</div></div>
+                    <div class="kpi"><div class="kpi-value text-blue-500">${lowCount}</div><div class="kpi-label">Leituras Baixas</div></div>
+                `;
+            };
+
+            const renderChart = (filter = 'Todos') => {
+                const ctx = document.getElementById('glucoseChart').getContext('2d');
+                
+                const last7Days = new Date();
+                last7Days.setDate(last7Days.getDate() - 7);
+                
+                let filteredEntries = logEntries.filter(entry => new Date(entry.date) >= last7Days);
+
+                if (filter !== 'Todos') {
+                    if (filter === 'Pós-refeição') {
+                        filteredEntries = filteredEntries.filter(e => e.timeOfDay.includes('Pós-'));
+                    } else {
+                        filteredEntries = filteredEntries.filter(e => e.timeOfDay === filter);
+                    }
+                }
+
+                const data = {
+                    datasets: [{
+                        label: 'Glicemia (mg/dL)',
+                        data: filteredEntries.map(entry => ({ x: entry.date, y: entry.value })),
+                        borderColor: '#0077b6',
+                        backgroundColor: '#0077b6',
+                        tension: 0.1,
+                        pointBackgroundColor: filteredEntries.map(entry => {
+                            const status = getStatus(entry).class;
+                            if (status === 'status-elevado') return '#ffc107';
+                            if (status === 'status-alto') return '#dc3545';
+                            if (status === 'status-baixo') return '#0077b6';
+                            return '#28a745';
+                        }),
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                    }]
+                };
+
+                const options = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                tooltipFormat: 'dd/MM/yyyy',
+                                displayFormats: {
+                                    day: 'dd/MM'
+                                }
+                            },
+                            title: { display: true, text: 'Data' }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            title: { display: true, text: 'Glicemia (mg/dL)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const entry = filteredEntries[context.dataIndex];
+                                    return `${entry.timeOfDay}: ${context.parsed.y} mg/dL`;
+                                }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                jejumMax: { type: 'line', yMin: GOALS.JEJUM_MAX, yMax: GOALS.JEJUM_MAX, borderColor: 'rgba(255, 159, 64, 0.5)', borderWidth: 2, borderDash: [6, 6], label: { content: 'Meta Jejum', enabled: true, position: 'start' } },
+                                pos2hMax: { type: 'line', yMin: GOALS.POS_REFEICAO_2H_MAX, yMax: GOALS.POS_REFEICAO_2H_MAX, borderColor: 'rgba(255, 99, 132, 0.5)', borderWidth: 2, borderDash: [6, 6], label: { content: 'Meta Pós-Refeição', enabled: true, position: 'end' } },
+                                low: { type: 'line', yMin: GOALS.LOW_THRESHOLD, yMax: GOALS.LOW_THRESHOLD, borderColor: 'rgba(54, 162, 235, 0.5)', borderWidth: 2, borderDash: [6, 6], label: { content: 'Limite Baixo', enabled: true, position: 'start' } }
+                            }
+                        }
+                    }
+                };
+                
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+                chartInstance = new Chart(ctx, { type: 'line', data, options });
+            };
+
+            const renderAll = () => {
+                renderTodayLog();
+                renderHistoryTable();
+                renderKPIs();
+                // Ensure chart renders with the currently active filter, or default to 'Todos'
+                const currentFilterButton = document.querySelector('#chart-filters .active');
+                renderChart(currentFilterButton ? currentFilterButton.dataset.filter : 'Todos');
+            };
+            
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newEntry = {
+                    id: Date.now(), // Use Date.now() for a unique ID for deletion
+                    date: new Date(form.date.value + 'T00:00:00'), // Adjust for timezone
+                    timeOfDay: form.timeOfDay.value,
+                    value: parseInt(form.glucose.value),
+                    notes: form.notes.value
+                };
+                logEntries.unshift(newEntry); // Add to the beginning
+                logEntries.sort((a, b) => b.date - a.date); // Re-sort by date descending
+                
+                saveData();
+                renderAll();
+                form.reset();
+                dateInput.valueAsDate = new Date(); // Reset date input to today
+            });
+
+            filterContainer.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const filter = e.target.dataset.filter;
+                    document.querySelectorAll('#chart-filters button').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    renderChart(filter);
+                }
+            });
+
+            // Initial setup
+            dateInput.valueAsDate = new Date();
+            loadData();
+            renderAll();
+        });
+    </script>
+</body>
+</html>
